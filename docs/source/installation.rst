@@ -20,7 +20,7 @@ core library can also be built using GNU make on Linux, macOS, and MinGW.
 C++11, and C++14.
 
 .. note::
-  |zfp| requires 64-bit compiler and operating system support.
+  |zfp| requires compiler support for 64-bit integers.
 
 .. _cmake_builds:
 
@@ -193,6 +193,8 @@ Regardless of the settings below, |libzfp| will always be built.
   CMake default: on.
   GNU make default: off.
 
+.. note::
+  On macOS, add :code:`OS=mac` when building shared libraries with GNU make.
 
 .. index::
    single: Configuration
