@@ -2,9 +2,11 @@
 #include <cstdlib>
 #include <iostream>
 #include <sstream>
+
 #ifdef _OPENMP
 #include <omp.h>
 #endif
+
 #include "zfp/array2.hpp"
 #include "zfp/array3.hpp"
 
