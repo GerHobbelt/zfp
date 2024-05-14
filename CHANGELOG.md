@@ -3,6 +3,15 @@ Change Log
 
 ---
 
+## Unreleased
+
+### Fixed
+
+- #176: `CFP` API is not exposed via CMake configuration file
+- #169: `libm` dependency is not always correctly detected.
+
+---
+
 ## 1.0.0 (2022-08-01)
 
 This release is not ABI compatible with prior releases due to numerous changes
