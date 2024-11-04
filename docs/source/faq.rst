@@ -42,6 +42,7 @@ Questions answered in this FAQ:
   #. :ref:`How large a buffer is needed for compressed storage? <q-max-size>`
   #. :ref:`How can I print array values? <q-printf>`
   #. :ref:`What is known about zfp compression errors? <q-err-dist>`
+  #. :ref:`Why are zfp blocks 4 * 4 * 4 values? <q-block-size>`
 
 -------------------------------------------------------------------------------
 
@@ -498,31 +499,48 @@ information independently.
 
 Q15: *Must I use the same parameters during compression and decompression?*
 
-A: Not necessarily.  When decompressing one block at a time, it is possible
-to use more tightly constrained :c:type:`zfp_stream` parameters during
-decompression than were used during compression.  For instance, one may use a
-smaller :c:member:`zfp_stream.maxbits`,
-smaller :c:member:`zfp_stream.maxprec`, or larger :c:member:`zfp_stream.minexp`
-during decompression to process fewer compressed bits than are stored, and to
-decompress the array more quickly at a lower precision.  This may be useful
-in situations where the precision and accuracy requirements are not known a
-priori, thus forcing conservative settings during compression, or when the
-compressed stream is used for multiple purposes.  For instance, visualization
-usually has less stringent precision requirements than quantitative data
-analysis.  This feature of decompressing to a lower precision is particularly
-useful when the stream is stored progressively (see :ref:`Q13 <q-progressive>`).
+A: Usually, but there are exceptions.  When decompressing one block at a time
+using the :ref:`low-level API <ll-api>`, it is possible to use more tightly
+constrained :c:type:`zfp_stream` parameters during decompression than were
+used during compression.  For instance, one may use a smaller
+:c:member:`zfp_stream.maxbits`, smaller :c:member:`zfp_stream.maxprec`, or
+larger :c:member:`zfp_stream.minexp` during decompression to process fewer
+compressed bits than are stored, and to decompress the array more quickly at
+a lower precision.  This may be useful in situations where the precision and
+accuracy requirements are not known a priori, thus forcing conservative
+settings during compression, or when the compressed stream is used for
+multiple purposes.  For instance, visualization usually has less stringent
+precision requirements than quantitative data analysis.  This feature of
+decompressing to a lower precision is particularly useful when the stream is
+stored progressively (see :ref:`Q13 <q-progressive>`).
 
-Note that one may not use less constrained parameters during decompression,
-e.g., one cannot ask for more than :c:member:`zfp_stream.maxprec` bits of
-precision when decompressing.  Furthermore, the parameters must agree between
-compression and decompression when calling the high-level API function
-:c:func:`zfp_decompress`.
+Note, however, that when doing so, the caller must manually fast-forward
+the stream (using :c:func:`stream_rseek`) to the beginning of the next block
+before decompressing it, which may require extra bookkeeping.
 
-Currently float arrays have a different compressed representation from
-compressed double arrays due to differences in exponent width.  It is not
-possible to compress a double array and then decompress (demote) the result
-to floats, for instance.  Future versions of the |zfp| codec may use a unified
-representation that does allow this.
+Also note that one may not use less constrained parameters during
+decompression, e.g., one cannot ask for more than
+:c:member:`zfp_stream.maxprec` bits of precision when decompressing.
+Furthermore, the parameters must agree between compression and decompression
+when calling the high-level API function :c:func:`zfp_decompress`.
+
+With regards to the :c:type:`zfp_field` struct passed to
+:c:func:`zfp_compress` and :c:func:`zfp_decompress`, field dimensions must
+match between compression and decompression, however strides need not match
+(see :ref:`Q16 <q-strides>`).  Additionally, the scalar type,
+:c:type:`zfp_type`, must match.  For example, float arrays currently have a
+compressed representation different from compressed double arrays due to
+differences in exponent width.  It is not possible to compress a double array
+and then decompress (demote) the result to floats, for instance.  Future
+versions of the |zfp| codec may use a unified representation that does allow
+this.
+
+By default, compression parameters and array metadata are not stored in the
+compressed stream, as often such information is recorded separately.
+However, the user may optionally record both compression parameters and array
+metadata in a header at the beginning of the compressed stream; see
+:c:func:`zfp_write_header`, :c:func:`zfp_read_header`, and further discussion
+:ref:`here <field-match>`.
 
 -------------------------------------------------------------------------------
 
@@ -543,6 +561,33 @@ scalar fields can later be decompressed as non-interleaved fields::
 
 using strides *sx* = 1, *sy* = *nx* and pointers :code:`&out[0][0][0]`
 and :code:`&out[1][0][0]`.
+
+Another use case is when a compressed array is to be decompressed into a
+larger surrounding array.  For example, a 3D subarray with dimensions
+*mx* |times| *my* |times| *mz* may be decompressed into a larger array
+with dimensions *nx* |times| *ny* |times| *nz*, with *mx* |leq| *nx*,
+*my* |leq| *ny*, *mz* |leq| *nz*.  This can be achieved by setting the strides
+to *sx* = 1, *sy* = *nx*, *sz* = *nx* |times| *ny* upon decompression (using
+:c:func:`zfp_field_set_stride_3d`), while specifying *mx*, *my*, and *mz* as
+the field dimensions (using :c:func:`zfp_field_3d` or
+:c:func:`zfp_field_set_size_3d`).  In this case, one may also wish to offset
+the decompressed subarray to (*ox*, *oy*, *oz*) within the larger array
+using::
+
+  float* data = new float[nx * ny * nz];
+  pointer = data + ox * sx + oy * sy + oz * sz
+
+where *data* specifies the beginning of the larger array.  *pointer* rather
+than *data* would then be passed to :c:func:`zfp_field_3d` or
+:c:func:`zfp_field_set_pointer` before calling :c:func:`zfp_decompress`.
+
+.. note::
+  Strides are a property of the in-memory layout of an uncompressed array
+  and have no meaning with respect to the compressed bit stream representation
+  of the array.  As such, |zfp| provides no mechanism for storing information
+  about the original strides in the compressed stream.  If strides are to be
+  retained upon decompression, then the user needs to record them as auxiliary
+  metadata and initialize :c:type:`zfp_field` with them.
 
 -------------------------------------------------------------------------------
 
@@ -1268,3 +1313,90 @@ done to combat such issues by supporting optional
   (left), errors are biased and depend on the relative location within a |zfp|
   block, resulting in errors not centered on zero.  With proper rounding
   (right), errors are both smaller and unbiased.
+
+-------------------------------------------------------------------------------
+
+.. _q-block-size:
+
+Q31: *Why are zfp blocks 4 * 4 * 4 values?*
+
+One might ask why |zfp| uses *d*-dimensional blocks of |4powd| values and not
+some other, perhaps configurable block size, *n*\ :sup:`d`.  There are several
+reasons why *n* = 4 was chosen:
+
+* For good performance, *n* should be an integer power of two so that indexing
+  can be done efficiently using bit masks and shifts rather than more
+  expensive division and modulo operations.  As compression demands *n* > 1,
+  possible choices for *n* are 2, 4, 8, 16, ...
+
+* When *n* = 2, blocks are too small to exhibit significant redundancy; there
+  simply is insufficient spatial correlation to exploit for sufficient data
+  reduction.  Additionally, excessive software cache thrashing would likely
+  occur for stencil computations, as even the smallest centered difference
+  stencil spans more than one block.  Finally, per-block overhead in storage
+  (e.g., shared exponent, bit offset) and computation (e.g., software cache
+  lookup) could be amortized over only few values.  Such small blocks were
+  immediately dismissed.
+
+* When *n* = 8, blocks are too large, for several reasons:
+
+  * Each uncompressed block occupies a large number of hardware cache lines.
+    For example, a single 3D block of double-precision values would occupy
+    4,096 bytes, which would represent a significant fraction of L1 cache.
+    |zfp| reduces data movement in computations by ensuring that repeated
+    accesses are to cached data rather than to main memory.
+
+  * A generalization of the |zfp| :ref:`decorrelating transform <algorithm>`
+    to *n* = 8 would require many more operations as well as "arbitrary"
+    numerical constants in need of expensive multiplication instead of cheap
+    bit shifts.  The number of operations in this more general case scales as
+    *d* |times| *n*\ :sup:`d+1`.  For *d* = 4, *n* = 8, this implies
+    2\ :sup:`17` = 131,072 multiplications and 114,688 additions per block.
+    Contrast this with the algorithm optimized for *n* = 4, which uses only
+    1,536 bit shifts and 2,560 additions or subtractions per 4D block.
+
+  * The additional computational cost would also significantly increase the
+    latency of decoding a single block or filling a pipeline of concurrently
+    (de)compressed blocks, as in existing |zfp| hardware implementations.
+
+  * The computational and cache storage overhead of accessing a single value
+    in a block would be very large: 4,096 values in *d* = 4 dimensions would
+    have to be decoded even if only one value were requested.
+
+  * "Skinny" arrays would have to be padded to multiples of *n* = 8, which
+    could introduce an unaccepable storage overhead.  For instance, a
+    30 |times| 20 |times| 3 array of 1,800 values would be padded to
+    32 |times| 24 |times| 8 = 6,144 values, an increase of about 3.4 times.
+    In contrast, when *n* = 4, only 32 |times| 20 |times| 4 = 2,560 values
+    would be needed, representing a 60% overhead.
+
+  * The opportunity for data parallelism would be reduced by a factor of
+    2\ :sup:`d` compared to using *n* = 4.  The finer granularity and larger
+    number of blocks provided by *n* = 4 helps with load balancing and maps
+    well to today's GPUs that can concurrently process thousands of blocks.
+
+  * With blocks comprising as many as 8\ :sup:`4` = 4,096 values, register
+    spillage would be substantial in GPU kernels for compression and
+    decompression.
+
+The choice *n* = 4 seems to be a sweet spot that well balances all of the
+above factors.  Additionally, *n* = 4 has these benefits:
+
+  * *n* = 4 admits a very simple lifted implementation of the decorrelating
+    transform that can be performed using only integer addition, subtraction,
+    and bit shifts.
+
+  * *n* = 4 allows taking advantage of AVX/SSE instructions designed for
+    vectors of length four, both in the (de)compression algorithm and
+    application code.
+
+  * For 2D and 3D data, a block is 16 and 64 values, respectively, which
+    either equals or is close to the warp size on current GPU hardware.  This
+    allows multiple cooperating threads to execute the same instruction on one
+    value in 1-4 blocks (either during (de)compression or in the numerical
+    application code).
+
+  * Using a rate of 16 bits/value (a common choice for numerical computations),
+    a compressed 3D block occupies 128 bytes, or 1-2 hardware cache lines on
+    contemporary computers.  Hence, a fair number of *compressed* blocks can
+    also fit in hardware cache.
