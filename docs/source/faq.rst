@@ -490,7 +490,7 @@ Additional benefits of this framework include:
 - No need to perform surgery on |zfp|.
 - Support for arbitrarily small |zfp| error tolerances (see
   :ref:`Q17 <q-tolerance>`) and even lossless compression in the limit.
-- Easy integratation with current file formats and I/O libraries.
+- Easy integration with current file formats and I/O libraries.
 
 -------------------------------------------------------------------------------
 
@@ -733,8 +733,8 @@ the number of blocks *bx* |times| *by*::
 
   bitsize = (4 * bx) * (4 * by) * rate
 
-where *nx* |leq| 4 |times| bx < *nx* + 4 and
-*ny* |leq| 4 |times| *by* < *ny* + 4.  When amortizing bitsize over the
+where *nx* |leq| 4 |times| *bx* < *nx* + 4 and
+*ny* |leq| 4 |times| *by* < *ny* + 4.  When amortizing *bitsize* over the
 *nx* |times| *ny* values, a slightly higher rate than requested may result.
 
 Third, to support updating compressed blocks, as is needed by |zfp|'s
@@ -770,8 +770,8 @@ uncompressed array to avoid having to allocate separate storage for the
 compressed stream.  |zfp| does allow for the possibility of such in-place
 compression, but with several caveats and restrictions:
 
-  1. A bitstream must be created whose buffer points to the beginning of
-     uncompressed (and to be compressed) storage.
+  1. A :c:type:`bitstream` must be created whose buffer points to the beginning
+     of uncompressed (and to be compressed) storage.
 
   2. The array must be compressed using |zfp|'s low-level API.  In particular,
      the data must already be partitioned and organized into contiguous blocks
@@ -828,8 +828,11 @@ floating-point values and then losslessly compressing the result.  The
 *q* least significant bits of *n*-bit floating-point numbers (*n* = 32
 for floats and *n* = 64 for doubles) are truncated by |zfp| by specifying a
 maximum precision of *p* = *n* |minus| *q*.  The resulting point-wise relative
-error is then at most 2\ :sup:`q - 23` (for floats) or 2\ :sup:`q - 52`
-(for doubles).
+error is then at most 2\ :sup:`3 d + q - 23` for floats and
+2\ :sup:`3 d + q - 52` for doubles, where *d* is the dimensionality of
+the data (1 |leq| *d* |leq| 4).  Expressed in terms of *p*, the relative error
+is at most 2\ :sup:`3 (d + 3) - p` for floats and 2\ :sup:`3 (d + 4) - p`
+for doubles.
 
 .. note::
   For large enough *q*, floating-point exponent bits will be discarded,
@@ -838,15 +841,21 @@ error is then at most 2\ :sup:`q - 23` (for floats) or 2\ :sup:`q - 52`
   for subnormals; however, such values are likely too small for relative
   errors to be meaningful.
 
+.. warning::
+  For the bound to hold, |zfp| must be modified to avoid the non-reversible
+  code path when less than full precision is used.  This issue will be
+  addressed in the next |zfp| release.
+
 To bound the relative error, set the expert mode parameters to::
 
-  minbits = 0
-  maxbits = 0
+  minbits = ZFP_MIN_BITS
+  maxbits = ZFP_MAX_BITS
   maxprec = p
   minexp = ZFP_MIN_EXP - 1 = -1075
 
 For example, using the |zfpcmd| command-line tool, set the parameters using
-:option:`-c` :code:`0 0 p -1075`.
+:option:`-c` :code:`0 0 p -1075` (|zfpcmd| will replace the zeros with
+defaults).
 
 Note that while the above approach respects the error bound when the
 above conditions are met, it uses |zfp| for a purpose it was not designed
@@ -1308,7 +1317,7 @@ resulting from |zfp|, as detailed in the following publications:
    SIAM Journal on Scientific Computing, 2019.
 #. D. Hammerling, A. Baker, A. Pinard, P. Lindstrom,
    "`A Collaborative Effort to Improve Lossy Compression Methods for Climate Data <https://doi.org/10.1109/DRBSD-549595.2019.00008>`__,"
-   5th International Workshop on Data Analysis and Reduction for Big Scientific Data, 2019.
+   5\ :sup:`th` International Workshop on Data Analysis and Reduction for Big Scientific Data, 2019.
 #. A. Fox, J. Diffenderfer, J. Hittinger, G. Sanders, P. Lindstrom.
    "`Stability Analysis of Inline ZFP Compression for Floating-Point Data in Iterative Methods <https://doi.org/10.1137/19M126904X>`__,"
    SIAM Journal on Scientific Computing, 2020.
