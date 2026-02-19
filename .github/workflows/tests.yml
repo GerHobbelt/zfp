@@ -44,8 +44,8 @@ jobs:
 
 #         - os: macos-latest
           - os: macos-14
-            cxx_compiler: g++-12
-            c_compiler: gcc-12
+            cxx_compiler: g++-13
+            c_compiler: gcc-13
             omp: ON
             target: all
 
@@ -56,10 +56,10 @@ jobs:
             target: all
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6
         with:
           python-version: '3.x'
           architecture: ${{ matrix.architecture || 'x64' }}
@@ -69,6 +69,7 @@ jobs:
           python -m pip install cython
           python -m pip install oldest-supported-numpy
           python -m pip install setuptools
+          python -m pip install packaging
       
       - name: Setup OpenMP (Linux)
         if: ${{(matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm') && matrix.cxx_compiler == 'clang++'}}
