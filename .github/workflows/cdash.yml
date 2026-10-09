@@ -1,0 +1,16 @@
+name: cdash
+on:
+  push:
+  pull_request_target:
+
+permissions: write-all
+
+jobs:
+  cdash:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: env
+      - run: .github/post-cdash-status
+        env:
+          CI_GITHUB_ROBOT_TOKEN: ${{ secrets.CI_GITHUB_ROBOT_TOKEN }}
