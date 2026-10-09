@@ -154,11 +154,11 @@ jobs:
           -DCTEST_SITE="Github"
           -DCTEST_SOURCE_DIRECTORY="${{github.workspace}}"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
-      - uses: TheMrMilchmann/setup-msvc-dev@v3
+      - uses: TheMrMilchmann/setup-msvc-dev@v4
         if: startsWith(matrix.generator, 'Visual Studio')
         with:
           arch: ${{matrix.platform}}
@@ -171,7 +171,7 @@ jobs:
           compiler: latest
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v7
         with:
           python-version: '3.x'
           architecture: ${{matrix.platform}}
