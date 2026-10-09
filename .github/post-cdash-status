@@ -4,7 +4,7 @@ set -eo pipefail
 
 readonly API_BASE="https://api.github.com/repos/LLNL/zfp"
 readonly TOKEN="${CI_GITHUB_ROBOT_TOKEN}"
-readonly COMMIT="${GITHUB_SHA}"
+readonly COMMIT="${COMMIT_SHA}"
 readonly CDASH_STATUS_CONTEXT="cdash"
 
 #==============================================================================
